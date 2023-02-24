@@ -1,0 +1,684 @@
+---
+title: "Final Project"
+author: "Group Project"
+date: '2022-02-27'
+output: html_document
+---
+```{r}
+#rm(list=ls())
+#install.packages("VIM")
+
+
+options(digits = 5)
+options(width = 48)
+
+library(skimr)
+library(corrplot)
+library(factoextra)
+library(cluster)
+library(ggplot2)
+library(ggfortify)
+library(scatterplot3d)
+library(pROC)
+library(ROCR)
+library(dplyr)
+library(caret)
+library(glmnet)
+library(readr)
+library(tidyverse)
+library(yardstick)
+library(tidymodels)
+library(mice)
+library(VIM)
+
+
+df <- read.csv("chicago_dataset.csv")
+colnames(df)
+```
+
+```{r}
+df[,2] <- as.numeric(gsub("[$,]","",df[,2]))#list price
+df[,13] <- as.numeric(gsub("[$,]","",df[,13]))
+df[,22] <- as.numeric(gsub("[$,]","",df[,22]))
+df[,96] <- as.numeric(gsub("[$,]","",df[,96]))
+df[,100] <- as.numeric(gsub("[$,]","",df[,100]))
+```
+
+```{r}
+# Changing date columns
+date.columns = c('List_Date', 'Closed_Date', 'Contract_Date', 'Off_Mkt_Dt', "UDT", "STD", "UD" )
+df <- mutate_at(df, date.columns, function(x) as.Date(x, format = "%m/%d/%Y"))
+```
+
+
+```{r}
+#Target Variable
+df$Target_Sell_Time <- as.factor(df$Target_Sell_Time)
+
+#Changing columns into proper types
+df$Area <- as.factor(df$Area)
+df$Parking<-factor(df$Parking)
+df$Garage_Spaces[is.na(df$Garage_Spaces)]<-0
+df$List_Broker<-as.factor(df$List_Broker)
+df$List_Office_Nm<-NULL
+df$Internet_List<-factor(df$Internet_List)
+df$Listing_Agent.Team_Name<-NULL
+df$Stove<-str_detect(df$App_Fea_Un_1, "Stove")
+df$Refrigerator<-str_detect(df$App_Fea_Un_1, "Refrigerator")
+df$Microwave<-str_detect(df$App_Fea_Un_1, "Microwave")
+df$CentralAirConditioner<-str_detect(df$App_Fea_Un_1, "Central Air Conditioner")
+df$Washer<-str_detect(df$App_Fea_Un_1, "Washer")
+df$WindowAirConditioner<-str_detect(df$App_Fea_Un_1, "Window Air Conditioner")
+df$FireplaceArtificial<-str_detect(df$App_Fea_Un_1, "Fireplace Artificial")
+df$HardwoodFloors<-str_detect(df$App_Fea_Un_1, "Hardwood Floors")
+df$App_Fea_Un_1<-as.factor(df$App_Fea_Un_1)
+df$App_Fea_Un_2<-as.factor(df$App_Fea_Un_2)
+df$LIST<-factor(df$LIST)
+df$X3_Br_Un_In_Bldg<-factor(df$X3_Br_Un_In_Bldg)
+df$ASI<-factor(df$ASI)
+df$Age<-factor(df$Age)
+df$Virtually_Staged_Photos<-factor(df$Virtually_Staged_Photos)
+df$Bsmt<-factor(df$Bsmt)
+df$Basement_Description<-NULL
+df$Br.Own_Int<-factor(df$Br.Own_Int)
+df$Blt_B4_78<-factor(df$Blt_B4_78)
+df$Buyer_Agent.Team_Name<-NULL
+df$Buyer_Broker<-as.factor(df$Buyer_Broker)
+df$Buyer_Off_Nm<-NULL
+df$Exterior<-as.factor(df$Exterior)
+df$Bus<-str_detect(df$General_Information, "Bus")
+df$Historical<-str_detect(df$General_Information, "Historical")
+df$Train<-str_detect(df$General_Information, "Train")
+df$Flood<-str_detect(df$General_Information, "Flood")
+df$InterstateAccess<-str_detect(df$General_Information, "Interstate Access")
+df$General_Information<-NULL
+df$Heat.Fuel<-NULL
+df$FIN<-factor(df$FIN)
+df$Flr_Un_1<-factor(df$Flr_Un_1)
+df$Flr_Un_2<-factor(df$Flr_Un_2)
+df$Garage_Ownership<-factor(df$Garage_Ownership)
+df$Garage_Type<-factor(df$Garage_Type)
+df$Lock_Box_Type<-factor(df$Lock_Box_Type)
+df$Lot_Dim<-NULL
+df$Lot_Size<-factor(df$Lot_Size)
+df$Master_Bedroom_Bath_Unit_1<-factor(df$Master_Bedroom_Bath_Unit_1)
+df$Master_Bedroom_Bath_Unit_2<-factor(df$Master_Bedroom_Bath_Unit_2)
+df$Mult_PINs<-factor(df$Mult_PINs)
+df$New_Const<-as.factor(df$New_Const)
+df$Owner_Nm<-as.factor(df$Owner_Nm)
+df$Ownership<-as.factor(df$Ownership)
+df$Possess<-factor(df$Possess)
+df$Rebuilt<-factor(df$Rebuilt)
+df$Rehab<-factor(df$Rehab)
+df$Roof<-factor(df$Roof)
+df$Terms<-factor(df$Terms)
+df$Imp_Sewer<-factor(df$Imp_Sewer)
+df$Short_Sale.Foreclosed.Court_Approved<-factor(df$Short_Sale.Foreclosed.Court_Approved)
+df$Spec_Assess<-factor(df$Spec_Assess)
+df$SCI<-factor(df$SCI)
+df$Special_Service_Area<-factor(df$Special_Service_Area)
+df$Tax_Exemps<-factor(df$Tax_Exemps)
+df$Township<-NULL
+df$TMU<-factor(df$TMU)
+df$Imp_Water<-factor(df$Imp_Water)
+df$Waterfront<-factor(df$Waterfront)
+df$Zip<-as.factor(df$Zip)
+df$Tot_Units <- as.factor(df$Tot_Units)
+df$Broker_Compensation <- as.factor(df$Broker_Compensation)
+df$Rnt_Un_1 <- as.numeric(df$Rnt_Un_1)
+df$Rnt_Un_2 <- as.numeric(df$Rnt_Un_2)
+df$percent_of_crime <- as.numeric(df$percent_of_crime)
+df$sidewalk_cafes <- as.numeric(df$sidewalk_cafes)
+df$school_teaching_score <- as.numeric(df$school_teaching_score)
+df$safe_school_score <- as.numeric(df$safe_school_score)
+df$education_mandate_score <- as.numeric(df$education_mandate_score)
+Sec_Dep_Un_1 <- NULL
+Sec_Dep_Un_2 <- NULL
+Lse_Exp_Dt_Un_1 <- NULL
+Lse_Exp_Dt_Un_2 <- NULL
+df$BR1 <- as.numeric(df$BR1)
+df$BR2 <- as.numeric(df$BR2)
+df$RM1 <- as.numeric(df$RM1)
+df$RM2 <- as.numeric(df$RM2)
+df$Yr_Blt <- as.factor(df$Yr_Blt)
+
+
+#Dropping Columns that have are not useful or contain too many missing variables
+df <- df %>% select( -Ten_Pays_Un_1, -Ten_Pays_Un_2, -Acreage, -CONC)
+```
+
+
+```{r}
+#creating factors by converting numerical data with fewer than 22 levels into factors
+
+(unique_column <- sapply(dplyr::select(df, is.numeric), n_distinct))
+(columns_to_factor <- names(unique_column)[unique_column<22])
+
+df <- mutate_at(df, columns_to_factor, as.factor)
+
+
+```
+
+```{r}
+#Imputing all numerical data with the median of its column
+
+df <- df %>% 
+  mutate_if(is.numeric, funs(replace(., is.na(.), median(., na.rm = TRUE))))
+```
+
+
+```{r}
+# Clean Data check
+df%>% skimr::skim()
+
+```
+
+
+
+```{r}
+
+aggr_plot <- aggr(df, col=c('navyblue','red'), numbers=TRUE, sortVars=TRUE, labels=names(df), cex.axis=.7, gap=3, ylab=c("Histogram of missing data","Pattern"))
+
+```
+
+
+```{r}
+#Variable Selection via Boruta
+
+library(Boruta)
+
+set.seed(123)
+inVars=sample(nrow(df))
+
+vs.boruta<-Boruta(df$Target_Sell_Time~.,data=df[inVars,],maxRuns=100,doTrace=0)
+
+plot(vs.boruta,xlab="",xaxt="n")
+lz<-lapply(1:ncol(vs.boruta$ImpHistory),function(i)
+  vs.boruta$ImpHistory[is.finite(vs.boruta$ImpHistory[,i]),i])
+names(lz)<-colnames(vs.boruta$ImpHistory)
+lb<-sort(sapply(lz,median))
+axis(side=1,las=2,labels=names(lb),at=1:ncol(vs.boruta$ImpHistory),cex.axis=0.5,font=4)
+
+s_variables=names(vs.boruta$finalDecision)[vs.boruta$finalDecision %in% c("Confirmed","Tentative")]
+```
+```{r}
+#Creating training and testing datasets 
+
+in.train=createDataPartition(df$Target_Sell_Time,p=.8,list=FALSE)
+train.mod.df= df[in.train, ]
+test.mod.df = df[-in.train, ]
+
+train.fit <- dplyr::select(train.mod.df, all_of(s_variables) | Target_Sell_Time)
+test.fit <- dplyr::select(test.mod.df, all_of(s_variables) | Target_Sell_Time)
+
+
+getROC <- function(y, phat, title="", add=F, col=4){
+  pred <- prediction(phat, y)
+  # ROC curve
+  perf <- performance(pred, measure = "tpr", x.measure = "fpr")
+  plot(perf, add=add, col=col, main=paste("ROC", title), lwd=2)
+  abline(0,1,lty=2)
+  # AUC
+  perf.auc <- performance(pred, measure = "auc")
+  auc <- perf.auc@y.values[[1]]
+  
+  return(auc)
+}
+
+```
+
+```{r}
+library(ranger)
+
+hyper_grid_rf <- expand.grid(
+  mtry = seq(2, 17, by = 3),
+  node_size = c(25, 50, 100, 150, 200),
+  OOB_RMSE = 0
+)
+
+for(i in 1:nrow(hyper_grid_rf)) {
+  # reproducibility
+  set.seed(1)
+  # train model
+  model <- ranger(
+    formula = train.fit$Target_Sell_Time ~ .,
+    data = train.fit,
+    num.trees = 500,
+    mtry = hyper_grid_rf$mtry[i],
+    min.node.size = hyper_grid_rf$node_size[i],
+    seed = 345,
+    respect.unordered.factors = "order"
+  )
+  # add OOB error to grid
+  hyper_grid_rf$OOB_RMSE[i] <- sqrt(model$prediction.error)
+}
+
+oo_rf = hyper_grid_rf[order(hyper_grid_rf$OOB_RMSE),]
+
+rf.fit.final <- ranger(
+  formula = train.fit$Target_Sell_Time ~ .,
+  data = train.fit,
+  num.trees = 500,
+  mtry = oo_rf[1,]$mtry,
+  min.node.size = oo_rf[1,]$node_size,
+  respect.unordered.factors = "order"
+)
+
+
+
+
+yhat.rf = predict(rf.fit.final, data = test.fit)$predictions
+
+tb_rf = table(predictions = yhat.rf, 
+                actual = test.fit$Target_Sell_Time)  
+print(tb_rf)
+```
+
+```{r}
+#Boosted model
+
+library(xgboost)
+
+hyper_grid <- expand.grid(
+  shrinkage = c(.3), ## controls the learning rate
+  interaction.depth = c(3, 5, 10), ## tree depth
+  n.minobsinnode = c(5, 10, 30), ## minimum number of observations required in each terminal node
+  bag.fraction = seq(.06,.8), ## percent of training data to sample for each tree
+  optimal_trees = 0, # a place to dump results
+  min_RMSE = 0 # a place to dump results
+)
+
+X.train = data.matrix(train.fit[,-24])
+Y.train = train.fit[,24]
+ 
+X.test = data.matrix(test.fit[,-24])
+Y.test = test.fit[,24]
+
+xgb_train = xgb.DMatrix(data=X.train, label=Y.train)
+xgb_test = xgb.DMatrix(data=X.test, label=Y.test)
+
+xgbc = xgboost(data=xgb_train, max.depth=4, nrounds=200)
+
+print(xgbc)
+pred = predict(xgbc, xgb_test)
+#print(pred)
+
+pred[(pred>7)] = 7
+pred_y = as.factor((levels(Y.test))[round(pred)])
+print(pred_y)
+
+tb_xgb = table(predictions = pred_y, 
+                actual = test.fit$Target_Sell_Time)  
+print(tb_xgb)
+
+
+#X.train <- sapply(train.fit, as.numeric)  
+#Y.train <- sapply(train.fit$Target_Sell_Time, as.numeric)-1
+
+#X.test <- sapply(test.fit, as.numeric)  
+#Y.test <- sapply(test.fit$Target_Sell_Time, as.numeric)-1
+
+for(i in 1:nrow(hyper_grid)) {
+  # create parameter list
+  params <- list(
+    eta = hyper_grid$shrinkage[i],
+    max_depth = hyper_grid$interaction.depth[i],
+    min_child_weight = hyper_grid$n.minobsinnode[i],
+    subsample = hyper_grid$bag.fraction[i]
+  )
+  # reproducibility
+  set.seed(1)
+  # train model
+  xgb.tune <- xgb.cv(
+    params = params,
+    data = xgb_train,
+    nrounds = 3000,
+    nfold = 5,
+    verbose = 0, # silent,
+    early_stopping_rounds = 10 # stop if no improvement for 10 consecutive trees
+  )
+  # add min training error and trees to grid
+  hyper_grid$optimal_trees[i] <- which.min(xgb.tune$evaluation_log$test_rmse_mean)
+  hyper_grid$min_RMSE[i] <- min(xgb.tune$evaluation_log$test_rmse_mean)
+}
+
+oo = hyper_grid[order(hyper_grid$min_RMSE),]
+
+# parameter list
+params <- list(
+  eta = oo[1,]$shrinkage,
+  max_depth = oo[1,]$interaction.depth,
+  min_child_weight = oo[1,]$n.minobsinnode,
+  subsample = oo[1,]$bag.fraction
+)
+
+# train final model
+xgb.fit.final <- xgboost(
+  params = params,
+  data = X.train,
+  label = train.fit$Target_Sell_Time,
+  nrounds = oo[1,]$optimal_trees,
+  verbose = 0
+)
+
+yhat.xgb <- predict(xgb.fit.final, newdata=X.test)-1
+yhat.xgb
+boost_RMSE = sqrt( var(Y.test - yhat.xgb) )
+boost_RMSE
+
+yhat.xgb[(yhat.xgb>7)] = 7
+pred_y = as.factor((levels(Y.test))[round(pred)])
+print(pred_y)
+
+tb_xgb = table(predictions = pred_y, 
+                actual = test.fit$Target_Sell_Time)  
+print(tb_xgb)
+
+tb_xgb = table(predictions = yhat.xgb, 
+                actual = test.fit$Target_Sell_Time)  
+print(tb_xgb)
+
+
+
+```
+
+```{r}
+#SVM
+library(e1071)
+
+svmfit <- svm(train.fit$Target_Sell_Time~., data=train.fit, kernal = "polynomial", type = 'C-classification', cost=1, scale=FALSE)
+
+ypred <- predict(svmfit, test.fit, type = 'prob')
+
+tb_svm = table(predictions = ypred, 
+                actual = test.fit$Target_Sell_Time)  
+print(tb_svm)
+
+tune.out=tune(e1071::svm, train.fit$Target_Sell_Time~., data=train.fit, 
+              kernel="polynomial",
+              ranges = list(cost=c(0.01, 0.1, 1))
+)
+
+summary(tune.out)
+
+bestmod=tune.out$best.model
+ypred = predict(bestmod,test.fit, type = 'prob')
+
+tb_svm = table(predictions = ypred, 
+                actual = test.fit$Target_Sell_Time)  
+print(tb_svm)
+
+```
+
+
+```{r}
+## Tree
+
+library(rpart)
+library(rpart.plot)
+
+big.tree = rpart(train.fit$Target_Sell_Time~., data=train.fit,
+control=rpart.control(minsplit=5,cp=0.0001,xval=10))
+nbig = length(unique(big.tree$where))
+cat('size of big tree: ',nbig,'\n')
+
+
+cptable = printcp(big.tree)
+bestcp = cptable[ which.min(cptable[,"xerror"]),"CP" ] 
+# show fit from some trees
+oo = order(train.fit$Target_Sell_Time)
+par(mfrow=c(1,1))
+best.tree = prune(big.tree,cp=bestcp)
+rpart.plot(best.tree)
+
+
+
+ypred.tree = predict(best.tree,test.fit, type = 'prob')
+
+tb_tree = table(predictions = ypred.tree, 
+                actual = test.fit$Target_Sell_Time)  
+print(tb_tree)
+```
+
+
+```{r}
+library(h2o)
+#used for the original determination that the data was skewed 
+
+h2o.init(nthreads=-1, max_mem_size="8G")
+h2o.no_progress()
+
+X.train = data.matrix(train.fit[,-24])
+Y.train = train.fit[,24]
+ 
+X.test = data.matrix(test.fit[,-24])
+Y.test = test.fit[,24]
+
+dfh2o = as.h2o(data.frame(x=X.train,y=Y.train), destination_frame = "train")
+dftest = as.h2o(data.frame(x=X.test,y=Y.test), destination_frame = "test")
+
+
+
+
+```
+
+
+```{r}
+
+
+#shifted the scope of the project towards determining whether target sell time will be greater or less than 14
+
+#data preparation
+new.df <- df
+
+new.df$Target_Sell_Time <- as.numeric(new.df$Target_Sell_Time)
+
+new.df$Target_Sell_Time <- replace(new.df$Target_Sell_Time, new.df$Target_Sell_Time < 5, 0)
+new.df$Target_Sell_Time <- replace(new.df$Target_Sell_Time, new.df$Target_Sell_Time == 5, 1)
+new.df$Target_Sell_Time <- replace(new.df$Target_Sell_Time, new.df$Target_Sell_Time == 6, 1)
+
+
+new.df$Target_Sell_Time <- as.factor(new.df$Target_Sell_Time)
+table(new.df$Target_Sell_Time)
+
+in.train=createDataPartition(new.df$Target_Sell_Time,p=.8,list=FALSE)
+train1.mod.df= new.df[in.train, ]
+test1.mod.df = new.df[-in.train, ]
+
+train1.fit <- dplyr::select(train1.mod.df, all_of(s_variables) | Target_Sell_Time)
+test1.fit <- dplyr::select(test1.mod.df, all_of(s_variables) | Target_Sell_Time)
+
+train1.mod.fit <- dplyr::select(train1.mod.df | Target_Sell_Time)
+test1.mod.fit <- dplyr::select(test1.mod.df | Target_Sell_Time)
+
+train1.mod.df
+test1.mod.df
+
+
+
+h2o.init(nthreads=-1, max_mem_size="8G")
+h2o.no_progress()
+
+X.train = data.matrix(train1.fit[,-24])
+Y.train = train1.fit[,24]
+ 
+X.test = data.matrix(test1.fit[,-24])
+Y.test = test1.fit[,24]
+
+dfh2o = as.h2o(data.frame(x=X.train,y=Y.train), destination_frame = "Btrain")
+dftest = as.h2o(data.frame(x=X.test,y=Y.test), destination_frame = "Btest")
+
+
+
+
+
+
+up_rec <- recipe( ~ ., data = train1.fit) %>%
+  step_upsample(Target_Sell_Time) %>%
+  prep(training = train1.fit)
+
+up_test <- recipe( ~ ., data = test1.fit) %>%
+  step_upsample(Target_Sell_Time) %>%
+  prep(training = test1.fit)
+
+up.train <- juice(up_rec)
+up.test <- juice(up_test)
+
+
+down_rec <- recipe( ~ ., data = train1.fit) %>%
+  step_downsample(Target_Sell_Time) %>%
+  prep(training = train1.fit)
+
+down_test <- recipe( ~ ., data = test1.fit) %>%
+  step_downsample(Target_Sell_Time) %>%
+  prep(training = test1.fit)
+
+down.train <- juice(down_rec)
+down.test <- juice(down_test)
+
+
+
+
+X.train.up = data.matrix(up.train[,-24])
+Y.train.up = up.train[,24]
+ 
+X.test.up = data.matrix(up.test[,-24])
+Y.test.up = up.test[,24]
+
+dfh2o = as.h2o(data.frame(x=X.train.up,y=Y.train.up), destination_frame = "UP_train")
+dftest = as.h2o(data.frame(x=X.test.up,y=Y.test.up), destination_frame = "UP_test")
+
+
+
+
+X.train.down = data.matrix(down.train[,-24])
+Y.train.down = down.train[,24]
+ 
+X.test.down = data.matrix(down.test[,-24])
+Y.test.down = down.test[,24]
+
+dfh2o = as.h2o(data.frame(x=X.train.down,y=Y.train.down), destination_frame = "DOWN_train")
+dftest = as.h2o(data.frame(x=X.test.down,y=Y.test.down), destination_frame = "DOWN_test")
+
+
+
+
+
+
+
+
+
+
+
+
+#X.train.mod = data.matrix(train1.mod.df[,-4])
+#Y.train.mod = train1.mod.df$Target_Sell_Time
+ 
+#X.test.mod = data.matrix(test1.mod.df[,-4])
+#Y.test.mod = test1.mod.df$Target_Sell_Time
+
+#dfh2o = as.h2o(data.frame(x=X.train.mod,y=Y.train.mod), destination_frame = "Atrain.mod")
+#dftest = as.h2o(data.frame(x=X.test.mod,y=Y.test.mod), destination_frame = "Atest.mod")
+
+
+
+
+
+getROC <- function(y, phat, title="", add=F, col=4){
+  pred <- prediction(phat, y)
+  # ROC curve
+  perf <- performance(pred, measure = "tpr", x.measure = "fpr")
+  plot(perf, add=add, col=col, main=paste("ROC", title), lwd=2)
+  abline(0,1,lty=2)
+  # AUC
+  perf.auc <- performance(pred, measure = "auc")
+  auc <- perf.auc@y.values[[1]]
+  
+  return(auc)
+}
+
+
+
+##random forest
+
+
+hyper_grid_rf <- expand.grid(
+  mtry = seq(2, 17, by = 3),
+  node_size = c(25, 50, 100, 150, 200),
+  OOB_RMSE = 0
+)
+
+for(i in 1:nrow(hyper_grid_rf)) {
+  # reproducibility
+  set.seed(1)
+  # train model
+  model <- ranger(
+    formula = train1.fit$Target_Sell_Time ~ .,
+    data = train1.fit,
+    num.trees = 500,
+    mtry = hyper_grid_rf$mtry[i],
+    min.node.size = hyper_grid_rf$node_size[i],
+    seed = 345,
+    respect.unordered.factors = "order"
+  )
+  # add OOB error to grid
+  hyper_grid_rf$OOB_RMSE[i] <- sqrt(model$prediction.error)
+}
+
+oo_rf = hyper_grid_rf[order(hyper_grid_rf$OOB_RMSE),]
+
+rf.fit.final <- ranger(
+  formula = train1.fit$Target_Sell_Time ~ .,
+  data = train1.fit,
+  num.trees = 500,
+  mtry = oo_rf[1,]$mtry,
+  min.node.size = oo_rf[1,]$node_size,
+  respect.unordered.factors = "order"
+)
+
+yhat.rf = predict(rf.fit.final, data = test1.fit)$predictions
+
+tb_rf = table(predictions = yhat.rf, 
+                actual = test1.fit$Target_Sell_Time)  
+print(tb_rf)
+
+
+
+
+
+
+
+
+
+
+
+library(DMwR)
+library(themis)
+
+
+data.upsample <- upSample(
+  x = train1.fit[,1:23], # select all columns save for the last one,
+  y = train.fit[,24],
+  yname = "Target_Sell_Time"
+)
+
+test.upsample<- upSample(
+  x = test.fit[,1:23], # select all columns save for the last one,
+  y = test.fit[,24],
+  yname = "Target_Sell_Time"
+)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```

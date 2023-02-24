@@ -1,0 +1,103 @@
+---
+title: "Group Project Code"
+author: "Group"
+date: "2/7/2022"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(ordinal)
+library(MASS)
+library(ggeffects)
+library(effects)
+library(caret)
+library(superml)
+library(Boruta)
+library(Rcpp)
+library(randomForest) 
+library(data.table)
+library(splitstackshape)
+library(plotly)
+
+cbPalette <- c("#999999", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+#set.seed(42)
+
+features = c('Market_Time_Bin', 'List_Price', 'Area', 'Beds', 'Baths', 'Tot_Units')
+
+chicago_housing <- read_csv("chicago_data_scaled.csv", 
+                             col_types = cols(Closed_Date = col_date(format = "%m/%d/%Y")))
+
+chicago_housing <- chicago_housing[, features]
+
+
+chicago_housing$Beds <- floor(chicago_housing$Beds)
+chicago_housing$Baths <- floor(chicago_housing$Baths)
+
+max_Beds = max(chicago_housing$Beds)
+min_Beds = min(chicago_housing$Beds)
+
+max_Baths = max(chicago_housing$Baths)
+min_Baths = min(chicago_housing$Baths)
+
+max_Units = max(chicago_housing$Tot_Units)
+min_Units = min(chicago_housing$Tot_Units)
+
+normalize <- function(x) {
+return ((x - min(x)) / (max(x) - min(x)))
+}
+
+chicago_housing$List_Price = parse_number(chicago_housing$List_Price)
+
+max_list_price = max(chicago_housing$List_Price)
+min_list_price = min(chicago_housing$List_Price)
+
+chicago_housing$List_Price <- normalize(chicago_housing$List_Price)
+
+
+normalize_inp <- function(x, min, max) {
+return ((x - min) / (max - min))
+}
+
+chicago_housing = na.omit(chicago_housing)
+
+label_area <- LabelEncoder$new()
+chicago_housing[["Area"]] <- label_area$fit_transform(chicago_housing[["Area"]])
+
+label_bin <- LabelEncoder$new()
+bin_vect <- c("Less than 14", "Between 14 and 30", "between 30 and 70", "Greater than 70")
+label_bin$fit(bin_vect)
+chicago_housing$Market_Time_Bin <- label_bin$transform(chicago_housing$Market_Time_Bin)
+
+chicago_housing <- stratified(chicago_housing, c('Market_Time_Bin'), 500)
+
+rows <- sample(nrow(chicago_housing))
+chicago_housing <- chicago_housing[rows, ] 
+
+chicago_housing$Market_Time_Bin = factor(chicago_housing$Market_Time_Bin, levels = c(0, 1, 2, 3))
+chicago_housing_train = stratified(chicago_housing, c('Market_Time_Bin'), 0.7)
+chicago_housing_test = stratified(chicago_housing, c('Market_Time_Bin'), 0.3)
+
+chicago_housing_train = as.data.frame(chicago_housing_train)
+chicago_housing_test = as.data.frame(chicago_housing_test)
+
+features = c('Market_Time_Bin', 'List_Price', 'Area', 'Beds', 'Baths', 'Tot_Units')
+
+chicago_housing_train = chicago_housing_train[, features]
+chicago_housing_test = chicago_housing_test[, features]
+
+rows <- sample(nrow(chicago_housing_train))
+chicago_housing_train <- chicago_housing_train[rows, ] 
+
+rows <- sample(nrow(chicago_housing_test))
+chicago_housing_test <- chicago_housing_test[rows, ] 
+
+rf <- randomForest(Market_Time_Bin ~., data = chicago_housing_train, ntree = 300,
+preProcess = c("center", "scale"),
+tuneLength = 10)
+```
+
+```{r}
+
+```
+
