@@ -1,0 +1,400 @@
+---
+title: "Homework ML"
+author: "Anthony Ivy"
+date: "2/1/2022"
+output:
+  html_document: default
+  word_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+
+##Full Library list
+knitr::opts_chunk$set(echo = TRUE)
+
+library(plotly)
+library(ggplot2)
+library(caret)
+library(tree)
+library(ranger)
+library(xgboost)
+library(dplyr)
+library(lubridate)
+library(MASS)
+library(DataExplorer)
+library(vip)
+library(Metrics)
+library(finetune)
+library(tidyr)
+library(tree)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+library(gbm)
+library(iml)
+library(maps)
+library(pdp)
+library(ggplot2)
+library(plotfunctions)
+library(tidyverse)#loading library for data manipulation/viz
+library(tidymodels)#library for machine learning
+library(finetune)
+
+```
+
+```{r}
+
+
+bike.test = read.csv("Bike_test.csv")
+bike.train = read.csv("Bike_train.csv")
+
+```
+```{r}
+bike.train %>% head()
+bike.train %>% str()
+ 
+```
+```{r}
+attach(bike.train)
+
+plot(daylabel, count, pch= 20)
+plot(windspeed, count, pch= 20)
+plot(humidity, count, pch= 20)
+plot(temp, count, pch= 20)
+plot(atemp, count, pch= 20)
+
+  ```
+```{r}
+ggplot(data = bike.train, aes(x=factor(season), y=count)) + geom_boxplot()
+
+```
+
+
+```{r}
+ggplot(data = bike.train, aes(x=hour, y=count)) + geom_point(aes(color=atemp))
+
+```
+```{r}
+ggplot(data = bike.train, aes(x=hour, y=count))+geom_point(aes(color=season))+facet_wrap(~season)
+```
+
+```{r}
+ggplot(data = bike.train, aes(x=hour, y=count))+geom_point(aes(color=season))+facet_wrap(~workingday)
+```
+
+
+```{r}
+bike.train%>%filter(year=="2011")%>%ggplot(aes(y=count, x=hour))+geom_point(aes(color=temp))
+
+bike.train%>%filter(year=="2012")%>%ggplot(aes(y=count, x=hour))+geom_point(aes(color=temp))
+```
+
+```{r}
+#Random Forest Model
+model.rf <- randomForest(count ~ .,data=bike.train, 
+                      mtry=4, ntree=250, nodesize=5, keep.inbag=TRUE, importance=TRUE)
+varImpPlot(model.rf, type=1, main="")
+
+
+```
+
+```{r}
+#hour
+mod <- Predictor$new(model.rf, data = bike.train[sample(nrow(bike.train), 300), ])
+eff <- FeatureEffect$new(mod,
+          feature = "hour",
+          center.at = min(bike.train$hour),
+          method = "pdp+ice",
+          grid.size = 30
+          )
+plot(eff)
+
+
+```
+
+```{r}
+#workingday pdp
+eff <- FeatureEffect$new(mod,
+          feature = "workingday",
+          center.at = min(bike.train$workingday),
+          method = "pdp+ice",
+          grid.size = 30
+          )
+plot(eff)
+```
+
+```{r}
+#daylabel
+eff <- FeatureEffect$new(mod,
+          feature = "daylabel",
+          center.at = min(bike.train$daylabel),
+          method = "pdp+ice",
+          grid.size = 30
+          )
+plot(eff)
+```
+
+```{r}
+#model.rf <- randomForest(count ~ humidity.,data=bike.train, 
+#                      mtry=4, ntree=250, nodesize=5, keep.inbag=TRUE, importance=TRUE)
+
+
+recipefortreeboost<-recipe(count~ ., data=bike.train)%>%
+  step_poly(humidity, degree=2)%>%
+  step_dummy(all_nominal_predictors())
+
+
+
+boostmodel<-boost_tree(mtry=11, tree_depth = 3, trees = 2250)%>%  #mtry11 tree3 trees2000 for removed variables  
+  set_engine("xgboost")%>%
+  set_mode("regression")
+
+boostmod<-workflow()%>%
+  add_recipe(recipefortreeboost)%>%
+  add_model(boostmodel)%>%
+  fit(bike.train)
+
+
+
+mod <- Predictor$new(model.rf, data = bike.train[sample(nrow(bike.train), 300), ])
+
+#humidity
+eff <- FeatureEffect$new(mod,
+          feature = "humidity",
+          center.at = min(bike.train$humidity),
+          method = "pdp+ice",
+          grid.size = 30
+          )
+plot(eff)
+
+
+
+
+```
+```{r}
+
+
+mod <- Predictor$new(model.rf, data = bike.train[sample(nrow(bike.train), 300), ])
+eff <- FeatureEffect$new(mod,
+          feature = "hour",
+          center.at = min(bike.train$hour),
+          method = "pdp+ice",
+          grid.size = 30
+          )
+plot(eff)
+
+
+
+
+
+
+
+set.seed(123)
+bike.train$temppred<-NULL
+bike.train$hour<-factor(bike.train$hour)
+bike.train$workingday<-factor(bike.train$workingday)
+bike.train$holiday<-factor(bike.train$holiday)
+bike.train$month<-factor(bike.train$month)
+bike.train$season<-factor(bike.train$season)
+bike.train$weather<-factor(bike.train$weather)
+
+bike.test$hour<-factor(bike.test$hour)
+bike.test$workingday<-factor(bike.test$workingday)
+bike.test$holiday<-factor(bike.test$holiday)
+bike.test$month<-factor(bike.test$month)
+bike.test$season<-factor(bike.test$season)
+bike.test$weather<-factor(bike.test$weather)
+#we change type of all our nominal data to factor
+
+
+#cleaning up the data
+remove.hum = bike.train[938:960,12]
+bike.train[5233:5256,12]
+mean(bike.train[5233:5256,12])
+bike.train[938:960,12] <- mean(bike.train[5233:5256,12])
+
+
+remove.atemp = bike.train[10478:10501,11]
+bike.train[9349:9372,11]
+mean(bike.train[9349:9372,11])
+bike.train[10478:10501,11] <- mean(bike.train[9349:9372,11])
+
+
+
+recipefortreeboost<-recipe(count~., data=bike.train )%>% #+season+year+holiday+day+month
+                           #windspeed+humidity+atemp+temp+weather+workingday+daylabel+hour
+                            # day+month+windspeed+humidity+atemp+temp+weather
+                           #+workingday+daylabel+hour
+                        
+  
+  step_poly(humidity, degree=2)%>%
+  step_dummy(all_nominal_predictors())
+
+
+boostmodel<-boost_tree(mtry=tune(), tree_depth = tune(), trees = tune())%>%
+  set_engine("xgboost")%>%
+  set_mode("regression")
+
+boostmod<-workflow()%>%
+  add_recipe(recipefortreeboost)%>%
+  add_model(boostmodel)
+
+
+gridwals<-expand_grid(mtry=c(9,11,13), tree_depth=c(3,4), trees=c(2100:2250)) 
+folds<-vfold_cv(bike.train, strata=count, 4)
+tunelin<-tune_race_anova(boostmod, grid=gridwals, resamples=folds, control=control_race(verbose_elim = T), verbosity = 0, 
+                         metrics = metric_set(yardstick::rmse))
+show_best(tunelin)
+
+
+
+
+#13, 3, 2281 46.07
+# with season+year+holiday+day+month removed 12, 3 , 2264
+```
+
+```{r}
+#Boost model after tuning the parameters
+
+
+
+
+
+recipefortreeboost<-recipe(count~ ., data=bike.train)%>%
+  step_poly(humidity, degree=2)%>%
+  step_dummy(all_nominal_predictors())
+
+
+
+boostmodel<-boost_tree(mtry=11, tree_depth = 3, trees = 2250)%>%  #mtry11 tree3 trees2000 for removed variables  
+  set_engine("xgboost")%>%
+  set_mode("regression")
+
+boostmod<-workflow()%>%
+  add_recipe(recipefortreeboost)%>%
+  add_model(boostmodel)%>%
+  fit(bike.train)
+
+
+extract_fit_parsnip(boostmod) %>%
+  vip(geom = "point")
+
+
+preds1<-predict(boostmod, bike.test)
+bike.test$pred<-preds1$.pred
+
+
+sampleSubmission = data.frame(Id=1:length(bike.test$pred), count=bike.test$pred)
+write.csv(sampleSubmission,
+          file = "sampleSubmission.csv",
+          row.names = FALSE,
+          quote = FALSE)
+
+
+
+
+
+
+  ###############################################################################
+
+
+
+
+hyper_grid <- expand.grid(
+  shrinkage = 0.1,     ## controls the learning rate
+  interaction.depth = 4, ## tree depth
+  n.minobsinnode = 40, ##  minimum number of observations required in each terminal node
+  bag.fraction = .65,  ##  percent of training data to sample for each tree
+  optimal_trees = 0,              ## a place to dump results
+  min_RMSE = 0                    ## a place to dump results
+)
+
+
+
+
+
+
+
+for(i in 1:nrow(hyper_grid)) {
+  
+  # create parameter list
+  params <- list(
+    eta = hyper_grid$shrinkage[i],
+    max_depth = hyper_grid$interaction.depth[i],
+    min_child_weight = hyper_grid$n.minobsinnode[i],
+    subsample = hyper_grid$bag.fraction[i]
+  )
+  
+  # reproducibility
+  set.seed(123)
+
+  # train model using Cross Validation
+  xgb.tune <- xgb.cv(
+    params = params,
+    data = X.train,
+    label = Y.train,
+    nrounds = 3000,
+    nfold = 5,
+    objective = "reg:squarederror",     # for regression models
+    verbose = 0,                        # silent,
+    early_stopping_rounds = 10          # stop if no improvement for 10 consecutive trees
+  )
+  
+  # add min training error and trees to grid
+  hyper_grid$optimal_trees[i] <- which.min(xgb.tune$evaluation_log$test_rmse_mean)
+  hyper_grid$min_RMSE[i] <- min(xgb.tune$evaluation_log$test_rmse_mean)
+}
+```
+
+Arrange grid by RMSE
+```{r}
+(oo = hyper_grid %>%
+      dplyr::arrange(min_RMSE) %>%
+      head(10))
+```
+Extract best parameters
+```{r}
+# parameter list
+params <- list(
+  eta = oo[1,]$shrinkage,
+  max_depth = oo[1,]$interaction.depth,
+  min_child_weight = oo[1,]$n.minobsinnode,
+  subsample = oo[1,]$bag.fraction
+)
+
+```
+Train Final Model
+```{r}
+xgb.fit.final <- xgboost(
+  params = params,
+  data = X.train,
+  label = Y.train,
+  nrounds = oo[1,]$optimal_trees,
+  objective = "reg:squarederror",
+  verbose = 0
+)
+```
+Use trained model to make predictions on test data
+Use true prices to calculate RMSE
+```{r}
+yhat.xgb <- predict(xgb.fit.final, newdata=X.test)
+sqrt( var(Y.test - yhat.xgb) )
+
+
+
+
+set.seed(123)
+library(gbm)
+boost.tree = gbm(count~.,data=bike.train, 
+                 distribution="gaussian", n.trees=5000, interaction.depth = 4)
+yhat.boost=predict(boost.tree, newdata = bike.test, n.trees=5000)
+mean((yhat.boost-bike.train)^2)
+
+
+
+
+#submit<- data.frame(Id=1:length(bike.test$pred), count=bike.test$pred)
+#write.csv(submit,file = "Week4sumbmission.csv",row.names = FALSE,quote = FALSE)#writing csv file 
+```
+

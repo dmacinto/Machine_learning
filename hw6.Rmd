@@ -1,0 +1,363 @@
+---
+title: "Homework 6"
+subtitle: ""
+author: ""
+date: ""
+output: 
+    pdf_document:
+      includes:
+        in_header: mystyles.sty         
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(eval = FALSE)
+```
+
+**Due:** end of day Friday, March 4
+
+**Submission instructions:** Submit one write-up per group on [gradescope.com](gradescope.com). 
+
+**IMPORTANT:** 
+
+- Write names of everyone that worked on the assignment on the submission.
+- Specify every member of the group when submitting on Gradescope    
+  (https://help.gradescope.com/article/m5qz2xsnjy-student-add-group-members)
+
+
+\sk\sk
+
+
+
+You will use the case 
+"Improving Lead Generation at Eureka Forbes Using Machine Learning Algorithms"
+for this assignment.
+
+
+You can load the data into R using
+```{r}
+load('eureka.RData')
+```
+
+- The `csv` file is available from http://hrm.iimb.ernet.in/iimb/Harvard/Eureka/index.htm
+
+You can quickly summarize the data as follows. 
+
+```{r}
+library(Hmisc)
+describe(eureka.df)
+```
+
+We want to predict if `converted_in_7days` is zero or not.
+
+```{r}
+eureka.df$converted_in_7days =  as.factor( ifelse(eureka.df$converted_in_7days==0, 0, 1) )
+table(eureka.df$converted_in_7days)
+```
+
+Next, we drop `client_id` column.
+```{r, message=FALSE}
+library(dplyr)
+eureka.df = eureka.df %>% select(-client_id)
+```
+
+Notice that this is a large dataset that contains some missing values. 
+
+- you can handle missing values the same way we dealt with them in Homework 4.
+
+Our focus here is on exploring how to deal with imbalanced data, so whatever you
+do with missing values will be fine.
+
+Notice that if we focus on dealing with complete cases (rows of data that contain all entries):
+```{r, eval=F}
+id.complete = complete.cases(eureka.df)
+eureka.complete = eureka.df[id.complete,]
+table(eureka.complete$converted_in_7days)
+```
+then unfortunately we drop quite a large number of the customers who convert.
+
+
+When splitting data into the train and test sets, make sure that 
+the proportion of minority cases stays roughly the same.
+For example, we can create a 50/50 split for the training set, used for
+model building, and the test set as follows:
+```{r, message=F}
+library(caret)
+in.train = createDataPartition(eureka.df$converted_in_7days, p=0.5, list=FALSE)
+train.df = eureka.df[in.train,]
+table(train.df$converted_in_7days)
+test.df = eureka.df[-in.train,]
+table(test.df$converted_in_7days)
+```
+
+Note that this is a very large dataset. In order to make things more manageable
+from a computational perspective, you should consider making the training set even 
+smaller and leaving a big portion of data for testing.
+
+
+# Questions
+
+1. Describe the problem that Kashif is facing as an analytical problem.
+
+2. Explore the following claims:
+
+   a. Customers using mobile, desktop, and tablet are equally distributed.
+   b. Repeat visitors are as likely to convert as new customers.
+   c. Customers who convert spend more time on the website.
+
+3. Explore how different types of models are affected by the class imbalance. Fit 
+several different models (for example, logistic regression, SVM, random forest, ...).
+Plot ROC curves and report AUC on the test data. Plot lift curve on the test data.
+
+4. Explore how different sampling techniques can
+help improve the classification performance.  Fit several different models on the balanced 
+datasets. Plot ROC curves and report AUC on the test data. Plot lift curve on the test data.
+
+
+**Note for part 3 and 4**: 
+
+- You do not have to fit every possible model that we learned. You do not 
+have to try hard to find _"the best"_ tuning parameters for your model.
+If a model is taking too long to run, use a different approach or reduce
+the sample size in your training set. The goal is to explore the effect
+that different sampling technique have on different classification procedures.
+
+- You could explore how to reduce the dimensionality of your data or how to
+reduce the number of input variables that your models are using.
+
+5. Based on the different model results, what would be your final recommendation to Kashif?
+
+6. Think about possible deployment strategies for the model. What would the
+added value be from the model to the Digital Marketing team?
+
+
+
+
+```{r, message=FALSE}
+
+fixNAs <- function(data_frame){
+  # Define reactions to NAs
+  integer_reac <- 0
+  factor_reac <- "FIXED_NA"
+  character_reac <- "FIXED_NA"
+  date_reac <- as.Date("1900-01-01")
+  
+  # Loop through columns in the data frame 
+  # and depending on which class the
+  # variable is, apply the defined reaction and 
+  # create a surrogate
+  
+  for (i in 1:ncol(data_frame)) {
+    if (class(data_frame[,i]) %in% c("numeric","integer")) {
+      if (any(is.na(data_frame[,i]))) {
+        data_frame[,paste0(colnames(data_frame)[i],"_surrogate")] <-
+          as.factor(ifelse(is.na(data_frame[,i]),"1","0"))
+        data_frame[is.na(data_frame[,i]), i] <- integer_reac
+      }
+    } else
+      if (class(data_frame[,i]) %in% c("factor")) {
+        if (any(is.na(data_frame[,i]))){
+          data_frame[,i]<-as.character(data_frame[,i])
+          data_frame[,paste0(colnames(data_frame)[i],"_surrogate")] <-
+            as.factor(ifelse(is.na(data_frame[,i]),"1","0"))
+          data_frame[is.na(data_frame[,i]),i]<-factor_reac
+          data_frame[,i]<-as.factor(data_frame[,i])
+        }
+      } else {
+        if (class(data_frame[,i]) %in% c("character")) {
+          if (any(is.na(data_frame[,i]))){
+            data_frame[,paste0(colnames(data_frame)[i],"_surrogate")]<-
+              as.factor(ifelse(is.na(data_frame[,i]),"1","0"))
+            data_frame[is.na(data_frame[,i]),i]<-character_reac
+          }
+        } else {
+          if (class(data_frame[,i]) %in% c("Date")) {
+            if (any(is.na(data_frame[,i]))){
+              data_frame[,paste0(colnames(data_frame)[i],"_surrogate")]<-
+                as.factor(ifelse(is.na(data_frame[,i]),"1","0"))
+              data_frame[is.na(data_frame[,i]),i]<-date_reac
+            }
+          }
+        }
+      }
+  }
+  
+  return(data_frame)
+}
+
+#2.b
+mult_sesh <- eureka.df %>% group_by(sessions>1)
+con_v_ret <- count(mult_sesh, 'converted_in_7days')
+
+
+set.seed(123)
+train.df<-fixNAs(train.df)
+test.df<-fixNAs(test.df)
+any( sapply(train.df, function(x) sum(is.na(x))) > 0)
+any( sapply(test.df, function(x) sum(is.na(x))) > 0)
+
+
+in.train=createDataPartition(train.df$converted_in_7days,p=.05,list=FALSE)
+train.mod.df= train.df[in.train, ]
+test.mod.df = train.df[-in.train, ]
+
+
+library(Boruta)
+inVars=sample(nrow(train.mod.df))
+vs.boruta<-Boruta(train.mod.df$converted_in_7days~.,data=train.mod.df[inVars,],maxRuns=500,doTrace=0)
+
+plot(vs.boruta,xlab="",xaxt="n")
+lz<-lapply(1:ncol(vs.boruta$ImpHistory),function(i)
+  vs.boruta$ImpHistory[is.finite(vs.boruta$ImpHistory[,i]),i])
+names(lz)<-colnames(vs.boruta$ImpHistory)
+lb<-sort(sapply(lz,median))
+axis(side=1,las=2,labels=names(lb),at=1:ncol(vs.boruta$ImpHistory),cex.axis=0.5,font=4)
+
+
+s_variables=names(vs.boruta$finalDecision)[vs.boruta$finalDecision %in% c("Confirmed","Tentative")]
+s_variables
+
+
+
+
+
+
+housing.train.fit <- dplyr::select(housing.train, all_of(s_variables) | Log_Sale_Price)
+housing.train.fit.model <- dplyr::select(train.df, all_of(s_variables) | Log_Sale_Price)
+
+
+
+
+
+
+
+
+
+#logistic regression
+lgfit.all <- glm(train.mod.df$converted_in_7days~ ., 
+                 data=train.mod.df, 
+                 family="binomial")
+summary(lgfit.all)
+lgfit.null <- glm(train.mod.df$converted_in_7days~ 1, 
+                 data=train.mod.df, 
+                 family="binomial")
+
+lgfit.selected <- step(lgfit.null,                   # the starting model for our search
+                       scope=formula(lgfit.all),    # the largest possible model that we will consider.
+                       direction="forward", 
+                       k=log(nrow(train.mod.df)),       # uses the BIC metric
+                       trace=1)
+summary(lgfit.selected)
+phat.lgfit.selected <- predict(lgfit.selected, 
+                               newdata = test.mod.df,
+                               type = "response")
+
+X <- model.matrix(formula(lgfit.all), train.mod.df)
+#need to subtract the intercept
+X <- X[,-1]
+
+
+
+
+
+
+X.train = X[ in.Train, ]
+X.test = X[ -in.Train, ]
+cv.l1.lgfit <- cv.glmnet(
+  x       = X.train, 
+  y       = train.mod.df$converted_in_7days,
+  family  = "binomial", 
+  alpha   = 1,   #alpha=0 gives ridge regression
+  nfolds  = 5)
+#plot(cv.l1.lgfit, sign.lambda=-1)
+glmnet.fit <- cv.l1.lgfit$glmnet.fit
+#plot(glmnet.fit, xvar = "lambda")
+#abline(v = log(cv.l1.lgfit$lambda.min), lty=2, col="red")
+#abline(v = log(cv.l1.lgfit$lambda.1se), lty=2, col="green")
+#legend("topright", legend=c("min", "1se"), lty=2, col=c("red", "green"))
+betas <- coef(cv.l1.lgfit, s = "lambda.1se")
+model.1se <- which(betas[2:length(betas)]!=0)
+colnames(X[,model.1se])
+phat.l1.lgfit <- predict(glmnet.fit,
+                         newx = X.test,
+                         s = cv.l1.lgfit$lambda.1se,
+                         type = "response")
+
+
+
+
+
+
+
+#random forest 
+library(ranger)
+hyper_grid_rf <- expand.grid(
+  mtry = seq(4, 20, by = 3), node_size = c(25, 50, 100, 150, 200), OOB_RMSE = 0
+)
+
+
+for(i in 1:nrow(hyper_grid_rf)) { # reproducibility
+  set.seed(1)
+  # train model
+  model <- ranger(
+    formula = train.mod.df$converted_in_7days ~ .,
+    data = train.mod.df,
+    num.trees = 500,
+    mtry = hyper_grid_rf$mtry[i], min.node.size = hyper_grid_rf$node_size[i], seed = 345
+  )
+  # add OOB error to grid
+  hyper_grid_rf$OOB_RMSE[i] <- sqrt(model$prediction.error) 
+}
+
+oo_rf = hyper_grid_rf[order(hyper_grid_rf$OOB_RMSE),]
+
+rf.fit.final <- ranger(
+  formula= train.mod.df$converted_in_7days ~ .,
+  data= train.mod.df,
+  num.trees= 500,
+  mtry= oo_rf[1,]$mtry,
+  min.node.size= oo_rf[1,]$node_size
+)
+
+yhat.rf = predict(rf.fit.final, data = test.var.sel)$predictions
+rf.RMSE <- sqrt( (var(as.integer(test.var.sel$outcome) - as.integer(yhat.rf))) ) 
+rf.RMSE
+
+
+
+
+
+
+
+library(ROCR)
+
+getROC <- function(y, phat, title="", add=F, col=4){
+  pred <- prediction(phat, y)
+  # ROC curve
+  perf <- performance(pred, measure = "tpr", x.measure = "fpr")
+  plot(perf, add=add, col=col, main=paste("ROC", title), lwd=2)
+  abline(0,1,lty=2)
+  # AUC
+  perf.auc <- performance(pred, measure = "auc")
+  auc <- perf.auc@y.values[[1]]
+  
+  return(auc)
+}
+
+
+# ROC for logistic regression
+getROC(test.mod.df$converted_in_7days, phat.lgfit.selected, "Logistic", col=4)
+
+
+
+
+
+
+
+
+
+
+
+
+#Q4 Ideally, please try out down-sampling, up-sampling, and SMOTE (three approaches).
+
+```
